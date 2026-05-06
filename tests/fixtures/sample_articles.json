@@ -1,0 +1,17 @@
+[
+  {
+    "article_id": 1,
+    "title": "Deep learning model for medical image classification",
+    "abstract": "This study proposes a convolutional neural network for classifying medical images and compares model performance across benchmark datasets."
+  },
+  {
+    "article_id": 2,
+    "title": "Secure routing protocol for wireless sensor networks",
+    "abstract": "This paper presents a secure routing method for wireless sensor networks using trust scoring and lightweight cryptographic verification."
+  },
+  {
+    "article_id": 3,
+    "title": "Query optimization strategy for distributed relational databases",
+    "abstract": "We introduce a cost-based query optimization approach to reduce execution time in distributed relational database systems."
+  }
+]
