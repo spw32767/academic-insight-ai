@@ -9,6 +9,7 @@ class GenerateRequest:
     prompt: str
     temperature: float = 0.0
     json_mode: bool = False
+    num_predict: int = 512
 
 
 @dataclass(frozen=True)

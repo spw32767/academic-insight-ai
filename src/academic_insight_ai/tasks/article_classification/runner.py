@@ -23,6 +23,11 @@ from academic_insight_ai.tasks.article_classification.config import ALLOWED_CATE
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_filename_part(value: str) -> str:
+    sanitized = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value)
+    return sanitized.strip("._") or "model"
+
+
 def _detect_error_type(error: Exception) -> str:
     text = str(error).lower()
     if "json" in text:
@@ -212,7 +217,8 @@ def run_article_classification(
         out_dir = output_dir or Path("outputs/article-classification")
         out_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        output_path = out_dir / f"{timestamp}_{model_name}.json"
+        safe_model_name = _sanitize_filename_part(model_name)
+        output_path = out_dir / f"{timestamp}_{safe_model_name}.json"
     else:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 

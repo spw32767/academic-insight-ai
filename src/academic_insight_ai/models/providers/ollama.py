@@ -17,7 +17,11 @@ class OllamaProvider(BaseModelProvider):
             "model": request.model_name,
             "prompt": request.prompt,
             "stream": False,
-            "options": {"temperature": request.temperature},
+            "think": False,
+            "options": {
+                "temperature": request.temperature,
+                "num_predict": request.num_predict,
+            },
         }
         if request.json_mode:
             payload["format"] = "json"
@@ -25,4 +29,7 @@ class OllamaProvider(BaseModelProvider):
         response = requests.post(url, json=payload, timeout=self._timeout_seconds)
         response.raise_for_status()
         data = response.json()
-        return GenerateResponse(text=data.get("response", ""), raw=data)
+        response_text = data.get("response", "")
+        if not response_text and isinstance(data.get("thinking"), str):
+            response_text = data["thinking"]
+        return GenerateResponse(text=response_text, raw=data)

@@ -117,7 +117,7 @@ def run_task(
     if computed_output_path is None:
         out_dir = Path("outputs") / "article-classification" / normalized_run_type
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        computed_output_path = out_dir / f"{timestamp}_{model_spec.provider_model_name}.json"
+        computed_output_path = out_dir / f"{timestamp}_{model_id}.json"
 
     try:
         written_path = runner(
