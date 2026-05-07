@@ -8,6 +8,7 @@ class GenerateRequest:
     model_name: str
     prompt: str
     temperature: float = 0.0
+    json_mode: bool = False
 
 
 @dataclass(frozen=True)

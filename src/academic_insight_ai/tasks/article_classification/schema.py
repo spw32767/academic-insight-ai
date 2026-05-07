@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 from academic_insight_ai.tasks.article_classification.config import ALLOWED_CATEGORIES
@@ -16,8 +18,10 @@ class ArticleClassification(BaseModel):
     primary_category: str
     secondary_categories: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
+    confidence_source: Literal["model_reported"] = "model_reported"
     reason: str
     model: str
+    validation_error_type: str | None = None
     debug_initial_prompt: str | None = None
     debug_correction_prompt: str | None = None
     raw_model_response: str | None = None

@@ -1,0 +1,37 @@
+[
+  {
+    "article_id": 101,
+    "title": "Convolutional Neural Networks for Diabetic Retinopathy Detection",
+    "abstract": "This paper presents a CNN-based pipeline for classifying retinal fundus images into diabetic retinopathy severity levels.",
+    "expected_primary_category": "Computer Vision",
+    "expected_secondary_categories": ["AI"]
+  },
+  {
+    "article_id": 102,
+    "title": "Lightweight Intrusion Detection for IoT Sensor Networks",
+    "abstract": "We propose an anomaly-based intrusion detection method for constrained IoT nodes in wireless sensor networks.",
+    "expected_primary_category": "Cyber Security",
+    "expected_secondary_categories": ["IoT", "Network"]
+  },
+  {
+    "article_id": 103,
+    "title": "Cost-Based Query Optimization in Distributed Relational Databases",
+    "abstract": "The study improves execution planning and join strategies for distributed SQL systems under heterogeneous workloads.",
+    "expected_primary_category": "Database",
+    "expected_secondary_categories": ["Data Science"]
+  },
+  {
+    "article_id": 104,
+    "title": "Transformer-Based Thai Academic Abstract Summarization",
+    "abstract": "This work applies transformer architectures to generate concise Thai summaries from long academic abstracts.",
+    "expected_primary_category": "Natural Language Processing",
+    "expected_secondary_categories": ["AI"]
+  },
+  {
+    "article_id": 105,
+    "title": "A Controlled Study on Code Review Practices in Student Capstone Teams",
+    "abstract": "We analyze defect density and delivery time under different code review policies in software engineering education projects.",
+    "expected_primary_category": "Software Engineering",
+    "expected_secondary_categories": []
+  }
+]

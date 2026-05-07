@@ -19,6 +19,8 @@ class OllamaProvider(BaseModelProvider):
             "stream": False,
             "options": {"temperature": request.temperature},
         }
+        if request.json_mode:
+            payload["format"] = "json"
 
         response = requests.post(url, json=payload, timeout=self._timeout_seconds)
         response.raise_for_status()

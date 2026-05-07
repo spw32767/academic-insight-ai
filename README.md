@@ -92,6 +92,8 @@ Each output record also includes debug fields for traceability:
 - `debug_initial_prompt`
 - `debug_correction_prompt` (present when retry is used)
 - `raw_model_response`
+- `confidence_source` (currently `model_reported`)
+- `validation_error_type` (present when correction/failure path is used)
 
 ## Project layout
 
