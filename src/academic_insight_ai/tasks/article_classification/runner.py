@@ -108,6 +108,7 @@ def _classify_one(article: ArticleInput, model_name: str, provider: Any) -> dict
         parsed = validate_model(
             {
                 **normalized_first_json,
+                "title": article.title,
                 "model": model_name,
                 "confidence_source": "model_reported",
                 "debug_initial_prompt": initial_prompt,
@@ -128,6 +129,7 @@ def _classify_one(article: ArticleInput, model_name: str, provider: Any) -> dict
             parsed = validate_model(
                 {
                     **normalized_corrected_json,
+                    "title": article.title,
                     "model": model_name,
                     "confidence_source": "model_reported",
                     "validation_error_type": first_error_type,
@@ -142,6 +144,7 @@ def _classify_one(article: ArticleInput, model_name: str, provider: Any) -> dict
             second_error_type = _detect_error_type(second_error)
             return {
                 "article_id": article.article_id,
+                "title": article.title,
                 "primary_category": "Other",
                 "secondary_categories": [],
                 "confidence": 0.0,
@@ -158,13 +161,20 @@ def _classify_one(article: ArticleInput, model_name: str, provider: Any) -> dict
 
 def run_article_classification(
     *,
-    input_path: Path,
+    input_path: Path | None,
     model_name: str,
     provider: Any,
     output_path: Path | None = None,
+    output_dir: Path | None = None,
     limit: int | None = None,
+    input_records: list[dict] | None = None,
 ) -> Path:
-    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    if input_records is not None:
+        payload = input_records
+    else:
+        if input_path is None:
+            raise ValueError("input_path is required when input_records is not provided")
+        payload = json.loads(input_path.read_text(encoding="utf-8"))
     records = [ArticleInput.model_validate(item) for item in payload]
     if limit is not None:
         records = records[:limit]
@@ -172,7 +182,7 @@ def run_article_classification(
     results = [_classify_one(article, model_name, provider) for article in records]
 
     if output_path is None:
-        out_dir = Path("outputs/article-classification")
+        out_dir = output_dir or Path("outputs/article-classification")
         out_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
         output_path = out_dir / f"{timestamp}_{model_name}.json"

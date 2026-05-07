@@ -37,6 +37,7 @@ Default values:
 - `OLLAMA_BASE_URL=http://localhost:11434`
 - `DEFAULT_MODEL=phi3`
 - `LOG_LEVEL=INFO`
+- `DATABASE_URL=mysql+pymysql://user:password@localhost:3306/academic_db`
 
 ### 3) Install Ollama (required)
 
@@ -85,10 +86,30 @@ Add limit and custom output path:
 academic-ai run-task --task article-classification --model phi3 --input tests/fixtures/sample_articles.json --limit 2 --output outputs/article-classification/manual_run_phi3.json
 ```
 
+Separate smoke-test output from production output:
+
+```bash
+academic-ai run-task --task article-classification --model phi3 --input tests/fixtures/sample_articles.json --run-type smoke --limit 2
+academic-ai run-task --task article-classification --model phi3 --input-source db --db-table scopus_documents --db-id-column id --db-title-column title --db-abstract-column abstract --run-type production --limit 50
+```
+
 Outputs are saved under:
-- `outputs/article-classification/`
+- `outputs/article-classification/production/` (default)
+- `outputs/article-classification/smoke/` (when `--run-type smoke`)
+
+Run from MariaDB/MySQL (read-only input):
+
+```bash
+academic-ai run-task --task article-classification --model phi3 --input-source db --db-table articles --db-id-column article_id --db-title-column title --db-abstract-column abstract --limit 50
+```
+
+Notes:
+- `DATABASE_URL` must be set in `.env`
+- DB input mode filters out rows where abstract is NULL or empty by default
+- DB mode currently reads input records only; it does not write back to DB
 
 Each output record also includes debug fields for traceability:
+- `title` (source article title for easier verification with DB)
 - `debug_initial_prompt`
 - `debug_correction_prompt` (present when retry is used)
 - `raw_model_response`
@@ -127,7 +148,7 @@ ollama pull <model-name>
 
 ## Current limitations
 
-- no real database connection in this phase
+- database mode is read-only input (no write-back yet)
 - runs one model per command
 - no parallel execution across models
 - relies on model response correctness with one retry for schema correction

@@ -11,6 +11,7 @@ class AppConfig:
     ollama_base_url: str
     default_model: str
     log_level: str
+    database_url: str | None
 
 
 def load_config() -> AppConfig:
@@ -19,4 +20,5 @@ def load_config() -> AppConfig:
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         default_model=os.getenv("DEFAULT_MODEL", "phi3"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
+        database_url=os.getenv("DATABASE_URL"),
     )
