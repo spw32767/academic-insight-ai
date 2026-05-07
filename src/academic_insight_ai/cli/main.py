@@ -42,6 +42,17 @@ def run_task(
         "--db-require-non-empty-abstract/--db-allow-empty-abstract",
         help="Filter rows where abstract is NULL or empty",
     ),
+    include_abstract: bool = typer.Option(
+        False,
+        "--include-abstract/--no-include-abstract",
+        help="Include source abstract in output records",
+    ),
+    abstract_max_chars: int | None = typer.Option(
+        None,
+        "--abstract-max-chars",
+        min=1,
+        help="Optional abstract length cap when --include-abstract is enabled",
+    ),
 ) -> None:
     config = load_config()
     configure_logging(config.log_level)
@@ -98,6 +109,10 @@ def run_task(
         typer.echo("--run-type must be 'production' or 'smoke'")
         raise typer.Exit(code=2)
 
+    if abstract_max_chars is not None and not include_abstract:
+        typer.echo("--abstract-max-chars requires --include-abstract")
+        raise typer.Exit(code=2)
+
     computed_output_path = output_path
     if computed_output_path is None:
         out_dir = Path("outputs") / "article-classification" / normalized_run_type
@@ -112,6 +127,8 @@ def run_task(
             output_path=computed_output_path,
             limit=limit,
             input_records=db_records,
+            include_abstract=include_abstract,
+            abstract_max_chars=abstract_max_chars,
         )
     except Exception as exc:
         typer.echo(

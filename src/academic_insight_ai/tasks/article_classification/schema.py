@@ -16,6 +16,7 @@ class ArticleInput(BaseModel):
 class ArticleClassification(BaseModel):
     article_id: int
     title: str
+    abstract: str | None = None
     primary_category: str
     secondary_categories: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)

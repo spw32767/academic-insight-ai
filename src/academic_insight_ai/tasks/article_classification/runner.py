@@ -96,7 +96,23 @@ def _normalize_model_payload(data: dict[str, Any], article_id: int) -> dict[str,
     return {key: value for key, value in normalized.items() if key in allowed_keys}
 
 
-def _classify_one(article: ArticleInput, model_name: str, provider: Any) -> dict[str, Any]:
+def _classify_one(
+    article: ArticleInput,
+    model_name: str,
+    provider: Any,
+    *,
+    include_abstract: bool,
+    abstract_max_chars: int | None,
+) -> dict[str, Any]:
+    context_fields: dict[str, Any] = {
+        "title": article.title,
+    }
+    if include_abstract:
+        article_abstract = article.abstract
+        if abstract_max_chars is not None:
+            article_abstract = article_abstract[:abstract_max_chars]
+        context_fields["abstract"] = article_abstract
+
     initial_prompt = build_prompt(article)
     first_response = provider.generate(
         GenerateRequest(model_name=model_name, prompt=initial_prompt, json_mode=True)
@@ -108,7 +124,7 @@ def _classify_one(article: ArticleInput, model_name: str, provider: Any) -> dict
         parsed = validate_model(
             {
                 **normalized_first_json,
-                "title": article.title,
+                **context_fields,
                 "model": model_name,
                 "confidence_source": "model_reported",
                 "debug_initial_prompt": initial_prompt,
@@ -129,7 +145,7 @@ def _classify_one(article: ArticleInput, model_name: str, provider: Any) -> dict
             parsed = validate_model(
                 {
                     **normalized_corrected_json,
-                    "title": article.title,
+                    **context_fields,
                     "model": model_name,
                     "confidence_source": "model_reported",
                     "validation_error_type": first_error_type,
@@ -144,7 +160,7 @@ def _classify_one(article: ArticleInput, model_name: str, provider: Any) -> dict
             second_error_type = _detect_error_type(second_error)
             return {
                 "article_id": article.article_id,
-                "title": article.title,
+                **context_fields,
                 "primary_category": "Other",
                 "secondary_categories": [],
                 "confidence": 0.0,
@@ -168,6 +184,8 @@ def run_article_classification(
     output_dir: Path | None = None,
     limit: int | None = None,
     input_records: list[dict] | None = None,
+    include_abstract: bool = False,
+    abstract_max_chars: int | None = None,
 ) -> Path:
     if input_records is not None:
         payload = input_records
@@ -179,7 +197,16 @@ def run_article_classification(
     if limit is not None:
         records = records[:limit]
 
-    results = [_classify_one(article, model_name, provider) for article in records]
+    results = [
+        _classify_one(
+            article,
+            model_name,
+            provider,
+            include_abstract=include_abstract,
+            abstract_max_chars=abstract_max_chars,
+        )
+        for article in records
+    ]
 
     if output_path is None:
         out_dir = output_dir or Path("outputs/article-classification")

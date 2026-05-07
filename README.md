@@ -93,6 +93,12 @@ academic-ai run-task --task article-classification --model phi3 --input tests/fi
 academic-ai run-task --task article-classification --model phi3 --input-source db --db-table scopus_documents --db-id-column id --db-title-column title --db-abstract-column abstract --run-type production --limit 50
 ```
 
+Include abstract in output (optional):
+
+```bash
+academic-ai run-task --task article-classification --model phi3 --input tests/fixtures/sample_articles.json --run-type smoke --include-abstract --abstract-max-chars 500 --limit 2
+```
+
 Outputs are saved under:
 - `outputs/article-classification/production/` (default)
 - `outputs/article-classification/smoke/` (when `--run-type smoke`)
@@ -110,6 +116,7 @@ Notes:
 
 Each output record also includes debug fields for traceability:
 - `title` (source article title for easier verification with DB)
+- `abstract` (optional, when `--include-abstract` is enabled)
 - `debug_initial_prompt`
 - `debug_correction_prompt` (present when retry is used)
 - `raw_model_response`
@@ -152,3 +159,7 @@ ollama pull <model-name>
 - runs one model per command
 - no parallel execution across models
 - relies on model response correctness with one retry for schema correction
+
+## Command reference
+
+Common run commands are collected in `docs/run-commands.md`.
