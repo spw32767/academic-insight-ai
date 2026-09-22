@@ -34,7 +34,7 @@ def _detect_error_type(error: Exception) -> str:
         return "json_parse_error"
     if "field required" in text or "missing" in text:
         return "missing_required_field"
-    if "invalid category" in text or "secondary categories" in text:
+    if "invalid category" in text:
         return "invalid_category"
     if "confidence" in text:
         return "invalid_confidence"
@@ -48,8 +48,6 @@ def _normalize_model_payload(data: dict[str, Any], article_id: int) -> dict[str,
         "main_focus": "primary_category",
         "main_field": "primary_category",
         "category": "primary_category",
-        "subfields": "secondary_categories",
-        "secondary": "secondary_categories",
         "justification": "reason",
         "rationale": "reason",
     }
@@ -61,40 +59,19 @@ def _normalize_model_payload(data: dict[str, Any], article_id: int) -> dict[str,
 
     normalized["article_id"] = article_id
 
-    if not isinstance(normalized.get("secondary_categories"), list):
-        normalized["secondary_categories"] = []
-
-    if isinstance(normalized.get("confidence"), str):
-        try:
-            normalized["confidence"] = float(normalized["confidence"])
-        except ValueError:
-            normalized["confidence"] = 0.5
-
-    if "confidence" not in normalized:
-        normalized["confidence"] = 0.5
-
-    if isinstance(normalized.get("confidence"), (int, float)):
-        normalized["confidence"] = max(0.0, min(1.0, float(normalized["confidence"])))
-    else:
-        normalized["confidence"] = 0.5
+    confidence = normalized.get("confidence")
+    if isinstance(confidence, str):
+        confidence = confidence.strip().title()
+    elif isinstance(confidence, (int, float)):
+        confidence = "High" if confidence >= 0.8 else "Medium" if confidence >= 0.5 else "Low"
+    normalized["confidence"] = confidence
 
     if "reason" not in normalized or not isinstance(normalized.get("reason"), str):
         normalized["reason"] = "Model response required normalization to match output schema."
 
-    primary_category = normalized.get("primary_category")
-    if isinstance(primary_category, str) and primary_category not in ALLOWED_CATEGORIES:
-        normalized["primary_category"] = "Other"
-
-    secondary = normalized.get("secondary_categories", [])
-    if isinstance(secondary, list):
-        normalized["secondary_categories"] = [
-            item for item in secondary if isinstance(item, str) and item in ALLOWED_CATEGORIES
-        ]
-
     allowed_keys = {
         "article_id",
         "primary_category",
-        "secondary_categories",
         "confidence",
         "reason",
     }
@@ -166,9 +143,8 @@ def _classify_one(
             return {
                 "article_id": article.article_id,
                 **context_fields,
-                "primary_category": "Other",
-                "secondary_categories": [],
-                "confidence": 0.0,
+                "primary_category": None,
+                "confidence": "Low",
                 "confidence_source": "model_reported",
                 "reason": f"Validation failed after retry: {second_error}",
                 "model": model_name,

@@ -1,6 +1,6 @@
 # academic-insight-ai
 
-`academic-insight-ai` is a local, CLI-first LLM workbench for academic data tasks.
+`academic-insight-ai` is a local LLM workbench and API service for academic data tasks.
 
 Current focus:
 - run repeatable AI tasks from local input files
@@ -8,9 +8,8 @@ Current focus:
 - validate structured output
 - save timestamped outputs for review and comparison
 
-What this project is not (yet):
+What this project is not:
 - no web UI
-- no API server
 - no queue system
 - no vector DB / RAG
 - no direct database write-back
@@ -122,6 +121,40 @@ Each output record also includes debug fields for traceability:
 - `raw_model_response`
 - `confidence_source` (currently `model_reported`)
 - `validation_error_type` (present when correction/failure path is used)
+
+## Run the independent APIs
+
+The PDF/OCR reader and article classifier are separate processes and never call each other.
+
+```bash
+academic-reader-api          # defaults to 127.0.0.1:8102
+academic-classification-api  # defaults to 127.0.0.1:8101
+```
+
+Set the same `AI_API_KEY` in this service and its caller. The reader exposes
+`POST /v1/papers/extract` and `POST /v1/papers/summarize`; the classifier exposes
+`POST /v1/papers/classify`. Scanned PDFs require OCRmyPDF with the `tha` and `eng`
+Tesseract language packs. Each service has its own `/health` endpoint and model setting.
+
+The classifier selects one of the seven active categories supplied by fund-management when there is enough evidence. It uses the
+abstract as primary evidence and the title and author keywords as supporting evidence. Its `confidence` value is
+one of `High`, `Medium`, or `Low`. If the record is a preface or lacks enough evidence to classify, it returns a null category and `Preface` confidence for human review. Numeric confidence scores and secondary categories are not part of the API contract.
+
+To classify a Scopus Excel export locally without fetching PDFs or opening the `scopus_link`, install
+`pip install -e ".[scopus-export]"` and run `python scripts/classify_scopus_export.py "C:\path\export.xlsx"`.
+The script reads `abstract`, `title`, and `authkeywords` and saves a resumable JSON checkpoint without
+modifying the source workbook. The classification API itself does not require `openpyxl`.
+
+For a model-quality test, the fund-management frontend and backend are not required. Ensure Ollama is running (`ollama list`); start `ollama serve` only if it is stopped. Then run
+the reader, Thai summarizer, and classifier directly against one or more PDFs:
+
+```powershell
+python scripts/test_real_papers.py "C:\path\paper-1.pdf" "C:\path\paper-2.pdf" --model qwen3-4b
+```
+
+The command prints the duration of each stage and writes the extracted metadata, Thai summary, classification,
+and confidence to `outputs/manual-paper-test/results.json`. Start the two APIs and the fund-management apps only
+after this direct test passes and you need to verify the complete upload, DOI mapping, database, and form flow.
 
 ## Project layout
 
