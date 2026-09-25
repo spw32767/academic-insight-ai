@@ -23,7 +23,9 @@ class OllamaProvider(BaseModelProvider):
                 "num_predict": request.num_predict,
             },
         }
-        if request.json_mode:
+        if request.json_schema is not None:
+            payload["format"] = request.json_schema
+        elif request.json_mode:
             payload["format"] = "json"
 
         response = requests.post(url, json=payload, timeout=self._timeout_seconds)

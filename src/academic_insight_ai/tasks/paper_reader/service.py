@@ -18,6 +18,11 @@ DOI_RE = re.compile(r"10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.IGNORECASE)
 DOI_LABEL_RE = re.compile(r"Digital\s+Object\s+Identifier\s+([^\r\n]+)", re.IGNORECASE)
 ABSTRACT_RE = re.compile(r"\bABSTRACT\s+(.+?)\s+INDEX\s+TERMS?\b", re.IGNORECASE | re.DOTALL)
 HEADER_AUTHOR_RE = re.compile(r"\b(?:[A-Z]\.\s*){1,4}[A-Z][A-Z'’-]{2,}\b")
+PUBLICATION_DATE_RE = re.compile(r"\bdate of publication\s+([A-Za-z]+)\s+\d{1,2},\s*\d{4}", re.IGNORECASE)
+MONTH_NUMBERS = {name.lower(): f"{index:02d}" for index, name in enumerate(
+    ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"),
+    start=1,
+)}
 
 
 class ExtractedPaper(BaseModel):
@@ -28,6 +33,9 @@ class ExtractedPaper(BaseModel):
     authors: list[str] = Field(default_factory=list)
     publication_year: int | None = None
     journal_name: str | None = None
+    publication_month: str | None = None
+    volume_issue: str | None = None
+    page_numbers: str | None = None
     page_count: int
     ocr_used: bool
     text: str
@@ -39,10 +47,12 @@ class SummaryRequest(BaseModel):
     abstract: str | None = Field(default=None, max_length=100_000)
     content: str | None = Field(default=None, max_length=500_000)
     model: str | None = None
+    include_translation: bool = False
 
 
 class SummaryResult(BaseModel):
     summary_th: str
+    translation_th: str | None = None
     source_type: str
     model: str
 
@@ -86,12 +96,68 @@ def _normalize_doi(value: str) -> str:
     return value.rstrip(".,;:)]}>").lower()
 
 
+def _metadata_title(metadata: dict[str, Any]) -> str | None:
+    title = str(metadata.get("/Title") or "").strip()
+    if not title or re.fullmatch(r"(?:untitled|unknown|document(?:\s+\d+)?|scan(?:ned)?(?:\s+\d+)?)", title, re.IGNORECASE):
+        return None
+    return title
+
+
 def _find_labeled_abstract(text: str) -> str | None:
     match = ABSTRACT_RE.search(text[:30_000])
     if not match:
         return None
     abstract = re.sub(r"\s+", " ", match.group(1)).strip()
     return abstract or None
+
+
+def _looks_like_research_paper(text: str, metadata: dict[str, Any], page_count: int) -> bool:
+    opening = text.split("\n\f\n", 1)[0][:15_000]
+    has_abstract = bool(re.search(r"\babstract\b", opening, re.IGNORECASE))
+    has_intro = bool(re.search(r"\b(?:i\.|1\.|introduction)\b", opening, re.IGNORECASE))
+    has_index_terms = bool(re.search(r"\b(?:index terms|keywords?)\b", opening, re.IGNORECASE))
+    has_references = bool(re.search(r"\b(?:references|bibliography)\b", text[-30_000:], re.IGNORECASE))
+    has_doi = bool(_find_trusted_doi(text, metadata))
+    has_volume = bool(re.search(r"\bvol(?:ume)?\.?\s+\d+\b", opening, re.IGNORECASE))
+    return (
+        (has_abstract and (has_intro or has_index_terms or has_references))
+        or (has_doi and (has_intro or has_references or has_volume))
+        or (page_count >= 2 and has_intro and has_references)
+    )
+
+
+def _find_publication_month(text: str) -> str | None:
+    opening = text.split("\n\f\n", 1)[0][:5_000]
+    match = PUBLICATION_DATE_RE.search(opening)
+    return MONTH_NUMBERS.get(match.group(1).lower()) if match else None
+
+
+def _find_volume_issue(text: str) -> str | None:
+    first_page_footer = text.split("\n\f\n", 1)[0][-1_500:]
+    volume = re.search(r"\bVOLUME\s+(\d{1,4})\b", first_page_footer, re.IGNORECASE)
+    if not volume:
+        return None
+    issue = re.search(r"\b(?:ISSUE|NO\.)\s+(\d{1,3})\b", first_page_footer[volume.end():volume.end() + 80], re.IGNORECASE)
+    return f"Vol. {volume.group(1)}, No. {issue.group(1)}" if issue else f"Vol. {volume.group(1)}"
+
+
+def _find_page_numbers(text: str, page_count: int) -> str | None:
+    if page_count < 2:
+        return None
+    pages = text.split("\n\f\n")
+    if len(pages) != page_count or not _find_volume_issue(text):
+        return None
+    first_footer = pages[0][-800:]
+    last_footer = pages[-1][-800:]
+    first_candidates = re.findall(r"(?m)^\s*(\d{3,6})\s*$", first_footer)
+    last_candidates = re.findall(r"\bVOLUME\s+\d{1,4},\s*\d{4}\s+(\d{3,6})\b", last_footer, re.IGNORECASE)
+    last_candidates += re.findall(r"\b(\d{3,6})\s+VOLUME\s+\d{1,4}\b", last_footer, re.IGNORECASE)
+    if not last_candidates:
+        last_candidates = re.findall(r"(?m)^\s*(\d{3,6})\s*$", last_footer)
+    if not first_candidates or not last_candidates:
+        return None
+    start, end = int(first_candidates[-1]), int(last_candidates[-1])
+    return f"{start}-{end}" if end - start + 1 == page_count else None
 
 
 def _find_header_authors(text: str) -> list[str]:
@@ -153,6 +219,9 @@ def extract_pdf(
         if _needs_ocr(text, page_count):
             warnings.append("Extracted text is sparse; please verify the result")
 
+    if not _looks_like_research_paper(text, metadata, page_count):
+        raise ValueError("ไฟล์ที่แนบไม่พบลักษณะของบทความวิจัย กรุณาแนบไฟล์ PDF ที่มีข้อมูลบทความ")
+
     trusted_doi = _find_trusted_doi(text, metadata)
     trusted_abstract = _find_labeled_abstract(text)
     doi_candidates = _find_doi_candidates(text, metadata)
@@ -179,7 +248,7 @@ def extract_pdf(
     if not selected_doi and model_selected_doi:
         selected_doi = _normalize_doi(str(model_selected_doi))
         if selected_doi not in doi_candidates:
-            warnings.append("Model-selected DOI was not found verbatim in the PDF and was discarded")
+            warnings.append("ไม่พบ DOI ของบทความที่ยืนยันได้จากไฟล์ จึงยังไม่เติม DOI อัตโนมัติ")
             selected_doi = None
     year = payload.get("publication_year")
     try:
@@ -194,13 +263,16 @@ def extract_pdf(
     authors = header_authors or model_authors
     try:
         return ExtractedPaper(
-            title=metadata.get("/Title") or payload.get("title"),
+            title=_metadata_title(metadata) or payload.get("title"),
             doi=selected_doi,
             doi_candidates=doi_candidates,
             abstract=trusted_abstract or payload.get("abstract"),
             authors=authors,
             publication_year=year,
             journal_name=payload.get("journal_name"),
+            publication_month=_find_publication_month(text),
+            volume_issue=_find_volume_issue(text),
+            page_numbers=_find_page_numbers(text, page_count),
             page_count=page_count,
             ocr_used=ocr_used,
             text=text,
@@ -218,18 +290,31 @@ def summarize(request: SummaryRequest, provider: Any, model_name: str) -> Summar
     source_type = "abstract" if request.abstract else "full_text"
     chunks = [source] if source_type == "abstract" else _content_chunks(source)
     partials: list[str] = []
+    translation: str | None = None
     for index, chunk in enumerate(chunks, start=1):
+        include_translation = request.include_translation and source_type == "abstract"
         prompt = (
             "Summarize this part of an academic paper accurately in Thai. Preserve the research goal, method, "
-            "data, and findings when present. Do not add facts. Return JSON only with key summary_th.\n"
-            f"Part {index} of {len(chunks)}:\n{chunk}"
+            "data, and findings when present. Do not add facts. "
+            + ("Also translate the entire original abstract into Thai, preserving every substantive detail and technical term. "
+               "Return JSON only with keys summary_th and translation_th.\n" if include_translation
+               else "Return JSON only with key summary_th.\n")
+            + f"Part {index} of {len(chunks)}:\n{chunk}"
         )
-        response = provider.generate(GenerateRequest(model_name=model_name, prompt=prompt, json_mode=True, num_predict=900))
+        response = provider.generate(GenerateRequest(
+            model_name=model_name, prompt=prompt, json_mode=True,
+            num_predict=4000 if include_translation else 900,
+        ))
         payload = extract_json_object(response.text)
         partial = payload.get("summary_th")
         if not isinstance(partial, str) or not partial.strip():
             raise ValueError(f"Model did not return summary_th for part {index}")
         partials.append(partial.strip())
+        if include_translation:
+            translated = payload.get("translation_th")
+            if not isinstance(translated, str) or not translated.strip():
+                raise ValueError("Model did not return translation_th")
+            translation = translated.strip()
     if len(partials) == 1:
         summary = partials[0]
     else:
@@ -242,7 +327,7 @@ def summarize(request: SummaryRequest, provider: Any, model_name: str) -> Summar
         summary = extract_json_object(response.text).get("summary_th")
     if not isinstance(summary, str) or not summary.strip():
         raise ValueError("Model did not return summary_th")
-    return SummaryResult(summary_th=summary.strip(), source_type=source_type, model=model_name)
+    return SummaryResult(summary_th=summary.strip(), translation_th=translation, source_type=source_type, model=model_name)
 
 
 def _content_chunks(content: str, max_chunks: int = 24) -> list[str]:

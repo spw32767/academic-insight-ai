@@ -15,7 +15,13 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from academic_insight_ai.apis.common import build_provider
-from academic_insight_ai.tasks.article_classification.service import ClassificationRequest, classify
+from academic_insight_ai.tasks.article_classification.fewshot_examples import BOUNDARY_EXAMPLE_IDS, EXAMPLE_IDS
+from academic_insight_ai.tasks.article_classification.service import (
+    AGREEMENT_CLASSIFIER_VERSION, ASTRA_CANDIDATE_VERSION, BOUNDARY_CANDIDATE_VERSION,
+    CLASSIFIER_VERSION, FEWSHOT_CANDIDATE_VERSION,
+    LEGACY_CLASSIFIER_VERSION,
+    ClassificationRequest, classify,
+)
 from paper_categories import CATEGORIES
 
 
@@ -69,26 +75,81 @@ def save_checkpoint(path: Path, report: dict[str, object]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workbook", type=Path)
-    parser.add_argument("--checkpoint", type=Path, default=Path("outputs/scopus-classification/checkpoint.json"))
+    parser.add_argument("--checkpoint", type=Path, default=Path("outputs/evidence-agreement/checkpoint.json"))
     parser.add_argument("--model", default="qwen3-4b")
     parser.add_argument("--limit", type=int, help="Classify at most this many new rows for a pilot run")
     parser.add_argument("--review-preface", action="store_true", help="Recheck substantive abstracts marked Preface")
+    parser.add_argument("--verification-mode", choices=["legacy", "single", "evidence_agreement", "astra_candidate", "fewshot_candidate", "boundary_candidate"],
+                        default="evidence_agreement", help="Use agreement mode for the conservative experiment")
+    parser.add_argument("--split-manifest", type=Path, help="Frozen split manifest for a partitioned evaluation")
+    parser.add_argument("--partition", choices=["development", "holdout"], help="Partition to classify")
+    parser.add_argument("--pilot-manifest", type=Path, help="Run only the disjoint few-shot pilot IDs")
     args = parser.parse_args()
 
     source_hash = hashlib.sha256(args.workbook.read_bytes()).hexdigest()
     records = read_records(args.workbook)
+    if bool(args.split_manifest) != bool(args.partition):
+        raise ValueError("--split-manifest and --partition must be supplied together")
+    split_hash = None
+    if args.split_manifest:
+        split_bytes = args.split_manifest.read_bytes()
+        split_hash = hashlib.sha256(split_bytes).hexdigest()
+        split = json.loads(split_bytes)
+        if split["source_sha256"] != source_hash:
+            raise ValueError("Split manifest belongs to another workbook")
+        selected_ids = set(split[f"{args.partition}_ids"])
+        if not selected_ids <= {str(record["scopus_id"]) for record in records}:
+            raise ValueError("Split manifest contains IDs absent from workbook")
+        records = [record for record in records if str(record["scopus_id"]) in selected_ids]
+    pilot_hash = None
+    if args.pilot_manifest:
+        if args.partition != "development" or args.verification_mode != "fewshot_candidate":
+            raise ValueError("Few-shot pilot requires development partition and fewshot_candidate mode")
+        pilot_bytes = args.pilot_manifest.read_bytes()
+        pilot_hash = hashlib.sha256(pilot_bytes).hexdigest()
+        pilot = json.loads(pilot_bytes)
+        if pilot["source_sha256"] != source_hash or set(pilot["example_ids"]) != EXAMPLE_IDS:
+            raise ValueError("Few-shot pilot does not match workbook or prompt examples")
+        pilot_ids = set(pilot["pilot_ids"])
+        if pilot_ids & EXAMPLE_IDS or not pilot_ids <= {str(record["scopus_id"]) for record in records}:
+            raise ValueError("Few-shot pilot overlaps examples or lies outside development partition")
+        records = [record for record in records if str(record["scopus_id"]) in pilot_ids]
+    if args.verification_mode in ("fewshot_candidate", "boundary_candidate") and args.partition == "development":
+        examples = BOUNDARY_EXAMPLE_IDS if args.verification_mode == "boundary_candidate" else EXAMPLE_IDS
+        records = [record for record in records if str(record["scopus_id"]) not in examples]
     if len({str(record["scopus_id"]) for record in records}) != len(records):
         raise ValueError("Duplicate scopus_id values in workbook")
     if args.checkpoint.exists():
         report = json.loads(args.checkpoint.read_text(encoding="utf-8"))
-        if report["source_sha256"] != source_hash or report["model"] != args.model:
-            raise ValueError("Checkpoint belongs to another workbook or model")
+        expected_version = (AGREEMENT_CLASSIFIER_VERSION if args.verification_mode == "evidence_agreement"
+                            else CLASSIFIER_VERSION if args.verification_mode == "single"
+                            else ASTRA_CANDIDATE_VERSION if args.verification_mode == "astra_candidate"
+                            else FEWSHOT_CANDIDATE_VERSION if args.verification_mode == "fewshot_candidate"
+                            else BOUNDARY_CANDIDATE_VERSION if args.verification_mode == "boundary_candidate"
+                            else LEGACY_CLASSIFIER_VERSION)
+        if (report["source_sha256"] != source_hash or report["model"] != args.model
+                or report.get("classifier_version") != expected_version
+                or report.get("verification_mode", "evidence_agreement") != args.verification_mode
+                or report.get("taxonomy_version") != TAXONOMY_VERSION
+                or report.get("split_sha256") != split_hash or report.get("partition") != args.partition
+                or report.get("pilot_sha256") != pilot_hash):
+            raise ValueError("Checkpoint belongs to another workbook, model, taxonomy, or classifier version")
     else:
         report = {
             "source_file": str(args.workbook.resolve()),
             "source_sha256": source_hash,
             "model": args.model,
             "taxonomy_version": TAXONOMY_VERSION,
+            "classifier_version": (AGREEMENT_CLASSIFIER_VERSION if args.verification_mode == "evidence_agreement"
+                                   else CLASSIFIER_VERSION if args.verification_mode == "single"
+                                   else ASTRA_CANDIDATE_VERSION if args.verification_mode == "astra_candidate"
+                                   else FEWSHOT_CANDIDATE_VERSION if args.verification_mode == "fewshot_candidate"
+                                   else BOUNDARY_CANDIDATE_VERSION if args.verification_mode == "boundary_candidate"
+                                   else LEGACY_CLASSIFIER_VERSION),
+            "verification_mode": args.verification_mode,
+            "split_sha256": split_hash,
+            "partition": args.partition,
+            "pilot_sha256": pilot_hash,
             "total_records": len(records),
             "results": {},
         }
@@ -117,6 +178,7 @@ def main() -> None:
             authkeywords=record["authkeywords"],
             categories=CATEGORIES,
             taxonomy_version=TAXONOMY_VERSION,
+            verification_mode=args.verification_mode,
         )
         started = time.perf_counter()
         for attempt in range(3):
@@ -134,7 +196,15 @@ def main() -> None:
             "scopus_link": record["scopus_link"],
             "category_code": classification.primary_category_code,
             "confidence": classification.confidence,
+            "model_reported_confidence": classification.model_reported_confidence,
+            "confidence_source": classification.confidence_source,
             "reason": classification.reason,
+            "verification_status": classification.verification_status,
+            "primary_contribution": classification.primary_contribution,
+            "evidence_quote": classification.evidence_quote,
+            "evidence_source": classification.evidence_source,
+            "candidate_category_codes": classification.candidate_category_codes,
+            "assessments": [assessment.model_dump() for assessment in classification.assessments],
             "elapsed_seconds": round(time.perf_counter() - started, 2),
         }
         if args.review_preface:

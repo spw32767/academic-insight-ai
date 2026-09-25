@@ -124,6 +124,8 @@ Each output record also includes debug fields for traceability:
 
 ## Run the independent APIs
 
+For installation alongside an existing fund-management deployment on Windows Server, follow the [Windows VM deployment guide](docs/windows-vm-deployment.md).
+
 The PDF/OCR reader and article classifier are separate processes and never call each other.
 
 ```bash
@@ -135,15 +137,44 @@ Set the same `AI_API_KEY` in this service and its caller. The reader exposes
 `POST /v1/papers/extract` and `POST /v1/papers/summarize`; the classifier exposes
 `POST /v1/papers/classify`. Scanned PDFs require OCRmyPDF with the `tha` and `eng`
 Tesseract language packs. Each service has its own `/health` endpoint and model setting.
+The reader returns publication month, volume/issue, and page numbers only when it can
+verify them in the PDF. It rejects documents that do not resemble a research paper.
+For an English abstract, send `{"abstract":"...","include_translation":true}` to
+`/v1/papers/summarize` to receive both `summary_th` and `translation_th`; the
+original abstract remains available in the extract response.
 
-The classifier selects one of the seven active categories supplied by fund-management when there is enough evidence. It uses the
-abstract as primary evidence and the title and author keywords as supporting evidence. Its `confidence` value is
-one of `High`, `Medium`, or `Low`. If the record is a preface or lacks enough evidence to classify, it returns a null category and `Preface` confidence for human review. Numeric confidence scores and secondary categories are not part of the API contract.
+The classifier selects one of the seven active categories supplied by fund-management when there is enough evidence. The API
+defaults to the original `legacy` mode while the newer evidence-based approaches are evaluated. Set `verification_mode` to
+`single` to require an exact supporting quote from the abstract (or fallback text). Set it to `evidence_agreement` to run
+a second independent assessment; that conservative
+experimental mode assigns a category only when both passes agree. Its confidence is the lower of the two model ratings.
+Neither confidence nor agreement is a calibrated accuracy score. Missing evidence, non-research records, and disagreement
+in agreement mode return a null category and `Preface` for review. The additive response fields `evidence_quote`, `evidence_source`,
+`primary_contribution`, `verification_status`, `candidate_category_codes`, and `assessments` provide an audit trail.
 
 To classify a Scopus Excel export locally without fetching PDFs or opening the `scopus_link`, install
 `pip install -e ".[scopus-export]"` and run `python scripts/classify_scopus_export.py "C:\path\export.xlsx"`.
-The script reads `abstract`, `title`, and `authkeywords` and saves a resumable JSON checkpoint without
-modifying the source workbook. The classification API itself does not require `openpyxl`.
+The script reads `abstract`, `title`, and `authkeywords` and saves a resumable, classifier-versioned JSON checkpoint without
+modifying the source workbook. It will not resume an older classifier's checkpoint. The classification API itself does not require `openpyxl`.
+Compare it with an earlier run using
+`python scripts/evaluate_classification_checkpoint.py outputs/my-local-test/results.json outputs/evidence-agreement/checkpoint.json --output outputs/evidence-agreement/evaluation.json`.
+This reports agreement and processing time; agreement between two model runs is not an accuracy score.
+The batch script defaults to the experimental `evidence_agreement` mode; pass `--verification-mode single`
+or `--verification-mode legacy` with a separate checkpoint path to compare modes.
+The frozen Astra model-authored reference, duplicate-aware development/holdout split, comparison commands,
+and limitations are documented in [the reference evaluation](docs/astra-reference-evaluation.md).
+The opt-in `astra_candidate` prompt can be evaluated by partition; it is not the API default.
+The later opt-in `fewshot_candidate` experiment uses eight frozen development examples. Its
+[evaluation and commands](docs/fewshot-classifier-evaluation.md) compare the same unseen records
+against the earlier local runs.
+An [independent 130-paper evaluation](docs/new-scopus-evaluation.md) compares legacy, few-shot v1,
+and the opt-in `boundary_candidate` prompt on a new Scopus export. The boundary prompt improves
+the targeted AI/Applied cases but reduces agreement on a random sample, so it is not the default.
+Its operational High ratings are capped at Medium as a temporary precaution, not statistical calibration.
+The classification request may also set `confidence_policy` to `conservative_cap` independently of
+`verification_mode`; this preserves the selected category and the model's raw rating in
+`model_reported_confidence`, while returning at most `Medium` as the operational confidence.
+The default `model_reported` policy preserves existing API behavior.
 
 For a model-quality test, the fund-management frontend and backend are not required. Ensure Ollama is running (`ollama list`); start `ollama serve` only if it is stopped. Then run
 the reader, Thai summarizer, and classifier directly against one or more PDFs:

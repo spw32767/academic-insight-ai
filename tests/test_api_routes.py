@@ -1,5 +1,9 @@
+import pytest
+from fastapi import HTTPException
+
 from academic_insight_ai.apis.classification import app as classification_app
 from academic_insight_ai.apis.reader import app as reader_app
+from academic_insight_ai.apis.common import require_api_key
 
 
 def test_apis_are_separate_and_expose_expected_routes() -> None:
@@ -15,6 +19,7 @@ def test_apis_are_separate_and_expose_expected_routes() -> None:
 
 
 def test_api_key_is_required(monkeypatch) -> None:
+    monkeypatch.setattr("academic_insight_ai.core.config.load_dotenv", lambda: None)
     monkeypatch.delenv("AI_API_KEY", raising=False)
     with pytest.raises(HTTPException) as exc:
         require_api_key(None)
@@ -25,7 +30,3 @@ def test_api_key_is_required(monkeypatch) -> None:
         require_api_key("wrong")
     assert exc.value.status_code == 401
     assert require_api_key("secret") is None
-import pytest
-from fastapi import HTTPException
-
-from academic_insight_ai.apis.common import require_api_key
