@@ -10,8 +10,11 @@ from academic_insight_ai.tasks.paper_reader.service import (
     ExtractedPaper,
     SummaryRequest,
     SummaryResult,
+    SDGSuggestionRequest,
+    SDGSuggestionResult,
     extract_pdf,
     summarize,
+    suggest_sdg,
 )
 
 app = FastAPI(title="Paper Reader API", version="1.0.0")
@@ -50,6 +53,18 @@ def summarize_paper(request: SummaryRequest) -> SummaryResult:
     try:
         provider, model_name = build_provider(request.model or config.reader_model)
         return summarize(request, provider, model_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Model provider failed: {exc}") from exc
+
+
+@app.post("/v1/papers/suggest-sdg", response_model=SDGSuggestionResult, dependencies=[Depends(require_api_key)])
+def suggest_paper_sdg(request: SDGSuggestionRequest) -> SDGSuggestionResult:
+    config = get_config()
+    try:
+        provider, model_name = build_provider(config.reader_model)
+        return suggest_sdg(request, provider, model_name)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:

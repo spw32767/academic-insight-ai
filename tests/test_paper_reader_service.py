@@ -1,6 +1,8 @@
 from academic_insight_ai.tasks.paper_reader.service import (
     DOI_RE,
     SummaryRequest,
+    SDGSuggestionRequest,
+    SDGOption,
     _find_doi_candidates,
     _find_header_authors,
     _find_labeled_abstract,
@@ -11,6 +13,7 @@ from academic_insight_ai.tasks.paper_reader.service import (
     _content_chunks,
     extract_pdf,
     summarize,
+    suggest_sdg,
 )
 from academic_insight_ai.models.types import GenerateResponse
 import pytest
@@ -71,6 +74,45 @@ def test_summary_can_prepare_translation_with_abstract() -> None:
     result = summarize(SummaryRequest(abstract="Original abstract", include_translation=True), TranslationProvider(), "fake")
     assert result.summary_th == "สรุปย่อ"
     assert result.translation_th == "คำแปลเต็ม"
+
+
+def test_sdg_suggestion_uses_paper_purpose_and_reports_closest_choice() -> None:
+    class SDGProvider:
+        def generate(self, request):
+            assert "Paper content: The study evaluates classroom learning outcomes" in request.prompt
+            assert "generic technology terms" in request.prompt
+            return GenerateResponse(
+                text='{"sdg_number":4,"reason_th":"ศึกษาผลสัมฤทธิ์การเรียนรู้",' \
+                     '"relationship":"closest"}', raw={},
+            )
+
+    result = suggest_sdg(
+        SDGSuggestionRequest(
+            title="Learning outcomes", abstract="The study evaluates classroom learning outcomes",
+            sdgs=[SDGOption(sdg_number=4, name_th="การศึกษาที่มีคุณภาพ", name_en="Quality Education")],
+        ),
+        SDGProvider(), "fake",
+    )
+    assert result.sdg_number == 4
+    assert result.relationship == "closest"
+    assert result.reason_th == "ศึกษาผลสัมฤทธิ์การเรียนรู้"
+
+
+def test_sdg_suggestion_rejects_number_outside_active_options() -> None:
+    class InvalidProvider:
+        def generate(self, request):
+            return GenerateResponse(
+                text='{"sdg_number":9,"reason_th":"ทั่วไป","relationship":"direct"}', raw={},
+            )
+
+    with pytest.raises(ValueError, match="outside the available options"):
+        suggest_sdg(
+            SDGSuggestionRequest(
+                title="Paper", abstract="Study of school learning",
+                sdgs=[SDGOption(sdg_number=4, name_th="การศึกษา", name_en="Education")],
+            ),
+            InvalidProvider(), "fake",
+        )
 
 
 def test_ieee_header_fields_require_explicit_publication_evidence() -> None:

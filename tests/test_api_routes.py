@@ -14,6 +14,7 @@ def test_apis_are_separate_and_expose_expected_routes() -> None:
     assert "/v1/papers/classify" not in reader_routes
     assert "/v1/papers/extract" in reader_routes
     assert "/v1/papers/summarize" in reader_routes
+    assert "/v1/papers/suggest-sdg" in reader_routes
     assert all(not path.startswith("/v1/papers/doi") for path in reader_routes)
     assert "/v1/papers/extract" not in classification_routes
 
