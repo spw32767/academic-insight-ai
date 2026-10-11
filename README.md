@@ -134,7 +134,7 @@ academic-classification-api  # defaults to 127.0.0.1:8101
 ```
 
 Set the same `AI_API_KEY` in this service and its caller. The reader exposes
-`POST /v1/papers/extract` and `POST /v1/papers/summarize`; the classifier exposes
+`POST /v1/papers/extract`, `POST /v1/papers/summarize`, and `POST /v1/papers/suggest-sdg`; the classifier exposes
 `POST /v1/papers/classify`. Scanned PDFs require OCRmyPDF with the `tha` and `eng`
 Tesseract language packs. Each service has its own `/health` endpoint and model setting.
 The reader returns publication month, volume/issue, and page numbers only when it can
