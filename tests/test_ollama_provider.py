@@ -31,3 +31,9 @@ def test_configured_ollama_timeout_is_used(monkeypatch):
     provider, model_name = build_provider("qwen3-4b")
     assert provider._timeout_seconds == 480
     assert model_name == "qwen3:4b"
+
+
+def test_smaller_qwen_model_can_be_selected_for_comparison():
+    provider, model_name = build_provider("qwen3-1.7b")
+    assert isinstance(provider, OllamaProvider)
+    assert model_name == "qwen3:1.7b"

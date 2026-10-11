@@ -21,7 +21,7 @@ Command pattern:
 ```bash
 academic-ai run-task \
   --task article-classification \
-  --model <phi3|gemma|qwen3-4b> \
+  --model <phi3|gemma|qwen3-1.7b|qwen3-4b> \
   --input-source <file|db> \
   [--input <json-file-when-file-mode>] \
   [--db-table <table>] [--db-id-column <id-col>] [--db-title-column <title-col>] [--db-abstract-column <abstract-col>] \

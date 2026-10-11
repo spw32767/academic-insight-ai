@@ -13,6 +13,7 @@ class ModelSpec:
 MODEL_REGISTRY: dict[str, ModelSpec] = {
     "phi3": ModelSpec(logical_id="phi3", provider="ollama", provider_model_name="phi3"),
     "gemma": ModelSpec(logical_id="gemma", provider="ollama", provider_model_name="gemma:2b"),
+    "qwen3-1.7b": ModelSpec(logical_id="qwen3-1.7b", provider="ollama", provider_model_name="qwen3:1.7b"),
     "qwen3-4b": ModelSpec(logical_id="qwen3-4b", provider="ollama", provider_model_name="qwen3:4b"),
 }
 
