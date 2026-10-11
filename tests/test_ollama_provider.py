@@ -1,5 +1,6 @@
 from academic_insight_ai.models.providers.ollama import OllamaProvider
 from academic_insight_ai.models.types import GenerateRequest
+from academic_insight_ai.apis.common import build_provider
 
 
 def test_structured_format_is_sent_only_when_requested(monkeypatch):
@@ -23,3 +24,10 @@ def test_structured_format_is_sent_only_when_requested(monkeypatch):
     provider.generate(GenerateRequest("model", "prompt", json_mode=True))
     assert sent[0]["format"] == schema
     assert sent[1]["format"] == "json"
+
+
+def test_configured_ollama_timeout_is_used(monkeypatch):
+    monkeypatch.setenv("OLLAMA_REQUEST_TIMEOUT_SECONDS", "480")
+    provider, model_name = build_provider("qwen3-4b")
+    assert provider._timeout_seconds == 480
+    assert model_name == "qwen3:4b"

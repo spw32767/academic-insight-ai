@@ -10,7 +10,7 @@
 
 ติดตั้ง Git, Python 3.11 หรือ 3.12 แบบ 64-bit และ Ollama สำหรับ Windows ให้คำสั่ง `git`, `py -3.11` (หรือ `py -3.12` ตามรุ่นที่ติดตั้ง) และ `ollama` ใช้งานได้ใน PowerShell ที่เปิดใหม่ การใช้ Ollama แบบ standalone service เหมาะกับ VM ที่ต้องทำงานหลังไม่มีผู้ใช้ login; ดู [คู่มือ Ollama บน Windows](https://github.com/ollama/ollama/blob/main/docs/windows.mdx) หากใช้แอป Ollama แบบปกติ ให้ตรวจว่ามันรันอยู่ก่อนสั่ง `ollama serve` เพราะพอร์ต 11434 ใช้ซ้ำไม่ได้
 
-สำหรับ PDF สแกน ให้ติดตั้ง Tesseract 64-bit พร้อมภาษา `eng`, `tha` และ `osd`; ติดตั้ง Ghostscript 64-bit และ `uv` แล้วเปิด PowerShell ใหม่เพื่อติดตั้ง OCRmyPDF:
+สำหรับ PDF สแกน ให้ติดตั้ง Tesseract 64-bit พร้อมภาษา `eng`, `tha` และ `osd` และติดตั้ง `uv` แล้วเปิด PowerShell ใหม่เพื่อติดตั้ง OCRmyPDF ตรวจสิทธิ์ใช้งาน Ghostscript ก่อนติดตั้งบนเซิร์ฟเวอร์จริง; การทดสอบ OCRmyPDF 17.13 บน VM นี้ผ่านโดยไม่มี Ghostscript แต่ PDF บางชนิดอาจยังต้องใช้:
 
 ```powershell
 uv tool install ocrmypdf
@@ -47,6 +47,7 @@ Copy-Item .env.example .env
 
 ```dotenv
 OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_REQUEST_TIMEOUT_SECONDS=480
 DEFAULT_MODEL=qwen3-4b
 CLASSIFICATION_MODEL=qwen3-4b
 READER_MODEL=qwen3-4b
@@ -134,8 +135,8 @@ build และรีสตาร์ต backend ให้โหลดค่า�
 1. ตรวจ `/health` ทั้งสอง API และ `ollama list` ให้ผ่าน
 2. เข้าแบบฟอร์มขอทุนด้วยบัญชีทดสอบ แนบ PDF บทความจริง ตรวจชื่อเรื่อง DOI, Abstract ต้นฉบับ สรุปภาษาไทย และ SDG ที่เลือกอัตโนมัติ หมายเหตุใต้ช่องต้องบอกว่าเป็นข้อเสนอจาก AI และผู้ใช้ต้องเปลี่ยน SDG เองได้ โดยยังไม่ส่งคำร้อง
 3. แนบ PDF ที่ไม่ใช่บทความวิจัย ต้องเห็นข้อความว่า `ไฟล์ที่แนบไม่พบลักษณะของบทความวิจัย กรุณาแนบไฟล์ PDF ที่มีข้อมูลบทความ`
-4. ทดลอง PDF สแกนอย่างน้อยหนึ่งไฟล์เพื่อยืนยันเส้นทาง OCR จริง (`ocrmypdf`, Tesseract ภาษาไทย/อังกฤษ และ Ghostscript)
+4. ทดลอง PDF สแกนอย่างน้อยหนึ่งไฟล์เพื่อยืนยันเส้นทาง OCR จริง (`ocrmypdf` และ Tesseract ภาษาไทย/อังกฤษ) หากไฟล์ใดต้องใช้ Ghostscript ให้ตรวจสิทธิ์ใช้งานก่อนติดตั้ง
 5. บนเซิร์ฟเวอร์ทดสอบ หยุด Reader ชั่วคราวแล้วแนบ PDF เพื่อตรวจว่าฟอร์มแจ้งข้อผิดพลาดเมื่ออ่านไม่ได้ จากนั้นเปิด Reader กลับและตรวจ `/health` อีกครั้ง
 6. ทดลองหน้าจัดหมวด Scopus แยก `scopus_benchmark_documents` กับ `scopus_documents` เลือกปีและเริ่มจำนวนน้อยก่อน ตรวจหมวด, confidence, ความคืบหน้า และข้อมูลในตารางที่เลือกก่อนจัดหมวดจำนวนมาก
 
-หลังผ่านการทดสอบ ให้ตั้ง Ollama, Reader และ Classification API ให้เริ่มอัตโนมัติหลังรีบูตด้วยบัญชีบริการที่อ่าน `.env` และใช้โมเดลของ Ollama ได้ หากใช้ Windows service manager เช่น NSSM ให้กำหนด `Application` เป็น Python ใน `.venv`, `Arguments` เป็น `-m uvicorn ...`, และ `Startup directory` เป็น `C:\services\academic-insight-ai` แยกสองบริการ จากนั้นรีบูต VM หนึ่งครั้งและตรวจ `/health` กับการอ่าน PDF ซ้ำ
+หลังผ่านการทดสอบ ค่อยตั้ง Ollama, Reader และ Classification API ให้เริ่มอัตโนมัติหลังรีบูตด้วยบัญชีบริการที่อ่าน `.env` และใช้โมเดลของ Ollama ได้ หากใช้ Windows service manager เช่น NSSM ให้กำหนด `Application` เป็น Python ใน `.venv`, `Arguments` เป็น `-m uvicorn ...`, และ `Startup directory` เป็น `C:\services\academic-insight-ai` แยกสองบริการ การตั้งค่าและทดสอบบริการไม่จำเป็นต้องรีบูต VM ทันที; นัดช่วงบำรุงรักษาแยกต่างหากสำหรับการทดสอบหลังรีบูต

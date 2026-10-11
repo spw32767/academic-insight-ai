@@ -10,6 +10,7 @@ from academic_insight_ai.tasks.paper_reader.service import (
     _find_page_numbers,
     _find_publication_month,
     _find_volume_issue,
+    _metadata_evidence,
     _content_chunks,
     extract_pdf,
     summarize,
@@ -52,6 +53,11 @@ def test_trusted_doi_ignores_reference_only_doi() -> None:
 def test_labeled_abstract_stops_before_index_terms() -> None:
     text = "ABSTRACT  This is the paper abstract.\nIt has two lines.\nINDEX TERMS BPMN, verification"
     assert _find_labeled_abstract(text) == "This is the paper abstract. It has two lines."
+
+
+def test_metadata_evidence_keeps_header_and_abstract_without_body() -> None:
+    text = "Title and authors\nABSTRACT Study results\nINDEX TERMS\nBody text" + "x" * 8_000
+    assert _metadata_evidence(text) == "Title and authors\nABSTRACT Study results\nINDEX TERMS"
 
 
 def test_header_author_detection_reads_ieee_author_line() -> None:

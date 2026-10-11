@@ -22,7 +22,7 @@ def build_provider(model_id: str) -> tuple[OllamaProvider, str]:
     spec = get_model_spec(model_id)
     if spec.provider != "ollama":
         raise ValueError(f"Unsupported provider: {spec.provider}")
-    return OllamaProvider(config.ollama_base_url), spec.provider_model_name
+    return OllamaProvider(config.ollama_base_url, timeout_seconds=config.ollama_request_timeout_seconds), spec.provider_model_name
 
 
 def get_config() -> AppConfig:

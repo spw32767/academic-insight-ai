@@ -213,6 +213,14 @@ def _find_doi_candidates(text: str, metadata: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(_normalize_doi(item) for item in candidates))
 
 
+def _metadata_evidence(text: str) -> str:
+    opening = text[:6_000].split("\n\f\n", 1)[0]
+    index_terms = re.search(r"\bINDEX\s+TERMS?\b", opening, re.IGNORECASE)
+    if index_terms:
+        return opening[:index_terms.end()]
+    return opening
+
+
 def extract_pdf(
     data: bytes,
     provider: Any,
@@ -256,9 +264,12 @@ def extract_pdf(
         f"Return one JSON object only with keys {requested_keys}. "
         "Use null or [] when unknown and never invent a value.\n"
         f"PDF metadata: {json.dumps(metadata, ensure_ascii=False, default=str)}\n"
-        f"DOI candidates: {json.dumps(doi_candidates)}\nText from opening pages: {text[:8000]}"
+        f"DOI candidates: {json.dumps(doi_candidates)}\nText from paper header: {_metadata_evidence(text)}"
     )
-    response = provider.generate(GenerateRequest(model_name=model_name, prompt=prompt, json_mode=True, num_predict=1600))
+    response = provider.generate(GenerateRequest(
+        model_name=model_name, prompt=prompt, json_mode=True,
+        num_predict=800 if trusted_abstract else 1600,
+    ))
     payload: dict[str, Any] = {}
     try:
         payload = extract_json_object(response.text)
